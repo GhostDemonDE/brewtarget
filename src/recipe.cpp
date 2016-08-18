@@ -227,7 +227,7 @@ QVector<PreInstruction> Recipe::mashInstructions(double timeRemaining, double to
    {
       mstep = msteps[i];
 
-      if( mstep->type() == MashStep::Infusion )
+      if( mstep->isInfusion() )
       {
          str = tr("Add %1 water at %2 to mash to bring it to %3.")
                .arg(Brewtarget::displayAmount(mstep->infuseAmount_l(), "mashStepTableModel", "infuseAmount_l", Units::liters))
@@ -235,11 +235,11 @@ QVector<PreInstruction> Recipe::mashInstructions(double timeRemaining, double to
                .arg(Brewtarget::displayAmount(mstep->stepTemp_c(), "mashStepTableModel", "stepTemp_c", Units::celsius));
          totalWaterAdded_l += mstep->infuseAmount_l();
       }
-      else if( mstep->type() == MashStep::Temperature )
+      else if( mstep->isTemperature() )
       {
          str = tr("Heat mash to %1.").arg(Brewtarget::displayAmount(mstep->stepTemp_c(), "mashStepTableModel", "stepTemp_c", Units::celsius));
       }
-      else if( mstep->type() == MashStep::Decoction )
+      else if( mstep->isDecoction() )
       {
          str = tr("Bring %1 of the mash to a boil and return to the mash tun to bring it to %2.")
                .arg(Brewtarget::displayAmount(mstep->decoctionAmount_l(), "mashStepTableModel", "decoctionAmount_l", Units::liters))
@@ -881,7 +881,7 @@ void Recipe::setBoilTime_min( double var )
       tmp = var;
    }
 
-   set( "boilTime_min", "boil_time", tmp );
+   set( "boilTime_min", "boil_time", tmp);
 }
 
 void Recipe::setEfficiency_pct( double var )
@@ -1345,34 +1345,14 @@ QDate Recipe::date()               const { return QDate::fromString( get("date")
 //=============================Removers========================================
 
 // Returns true if var is found and removed.
-void Recipe::removeHop( Hop *var )
+void Recipe::remove( BeerXMLElement *var )
 {
-   Database::instance().removeFromRecipe( this, var );
-}
-
-void Recipe::removeFermentable(Fermentable* var)
-{
-   Database::instance().removeFromRecipe( this, var );
-}
-
-void Recipe::removeMisc(Misc* var)
-{
-   Database::instance().removeFromRecipe( this, var );
-}
-
-void Recipe::removeWater(Water* var)
-{
-   Database::instance().removeFromRecipe( this, var );
-}
-
-void Recipe::removeYeast(Yeast* var)
-{
-   Database::instance().removeFromRecipe( this, var );
-}
-
-void Recipe::removeBrewNote(BrewNote* var)
-{
-   Database::instance().removeFromRecipe(this, var);
+   // brewnotes a bit odd
+   if ( var->metaObject()->className() == QString("BrewNote") )
+      // the cast is required to force the template to gets it thing right
+      Database::instance().remove(qobject_cast<BrewNote*>(var));
+   else
+      Database::instance().removeIngredientFromRecipe( this, var );
 }
 
 double Recipe::batchSizeNoLosses_l()
@@ -1393,6 +1373,8 @@ void Recipe::recalcAll()
    // Infinite recursion possible, since these methods will emit changed(),
    // causing other objects to call finalVolume_l() for example, which may
    // cause another call to recalcAll() and so on.
+   //
+   // GSG: Now only emit when _uninitializedCalcs is true, which helps some.
 
    // Someone has already called this function back in the call stack, so return to avoid recursion.
    if( !_recalcMutex.tryLock() )
@@ -1426,7 +1408,10 @@ void Recipe::recalcABV_pct()
    if ( ret != _ABV_pct ) 
    {
       _ABV_pct = ret;
-      emit changed( metaProperty("ABV_pct"), _ABV_pct );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("ABV_pct"), _ABV_pct );
+      }
    }
 }
 
@@ -1450,7 +1435,10 @@ void Recipe::recalcColor_srm()
    if ( _color_srm != ret ) 
    {
       _color_srm = ret;
-      emit changed( metaProperty("color_srm"), _color_srm );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("color_srm"), _color_srm );
+      }
    }
 
 }
@@ -1484,7 +1472,10 @@ void Recipe::recalcIBU()
    if ( ibus != _IBU ) 
    {
       _IBU = ibus;
-      emit changed( metaProperty("IBU"), _IBU );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("IBU"), _IBU );
+      }
    }
 }
 
@@ -1503,7 +1494,6 @@ void Recipe::recalcVolumeEstimates()
       _wortFromMash_l = 0.0;
    else
    {
-   
       waterAdded_l = mash()->totalMashWater_l();
       if( equipment() != 0 )
          absorption_lKg = equipment()->grainAbsorption_LKg();
@@ -1564,25 +1554,37 @@ void Recipe::recalcVolumeEstimates()
    if ( tmp_wfm != _wortFromMash_l )
    {
       _wortFromMash_l = tmp_wfm;
-      emit changed( metaProperty("wortFromMash_l"), _wortFromMash_l );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("wortFromMash_l"), _wortFromMash_l );
+      }
    }
 
    if ( tmp_bv != _boilVolume_l )
    {
       _boilVolume_l = tmp_bv;
-      emit changed( metaProperty("boilVolume_l"), _boilVolume_l );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("boilVolume_l"), _boilVolume_l );
+      }
    }
    
    if ( tmp_fv != _finalVolume_l )
    {
       _finalVolume_l = tmp_fv;
-      emit changed( metaProperty("finalVolume_l"), _finalVolume_l );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("finalVolume_l"), _finalVolume_l );
+      }
    }
 
    if ( tmp_pbv != _postBoilVolume_l )
    {
       _postBoilVolume_l = tmp_pbv;
-      emit changed( metaProperty("postBoilVolume_l"), _postBoilVolume_l );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("postBoilVolume_l"), _postBoilVolume_l );
+      }
    }
 }
 
@@ -1605,7 +1607,10 @@ void Recipe::recalcGrainsInMash_kg()
    if ( ret != _grainsInMash_kg ) 
    {
       _grainsInMash_kg = ret;
-      emit changed( metaProperty("grainsInMash_kg"), _grainsInMash_kg );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("grainsInMash_kg"), _grainsInMash_kg );
+      }
    }
 }
 
@@ -1622,7 +1627,10 @@ void Recipe::recalcGrains_kg()
    if ( ret != _grains_kg ) 
    {
       _grains_kg = ret;
-      emit changed( metaProperty("grains_kg"), _grains_kg );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("grains_kg"), _grains_kg );
+      }
    }
 }
 
@@ -1633,7 +1641,10 @@ void Recipe::recalcSRMColor()
    if ( tmp != _SRMColor )
    {
       _SRMColor = tmp;
-      emit changed( metaProperty("SRMColor"), _SRMColor );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("SRMColor"), _SRMColor );
+      }
    }
 }
 
@@ -1669,7 +1680,10 @@ void Recipe::recalcCalories()
    if ( tmp != _calories ) 
    {
       _calories = tmp;
-      emit changed( metaProperty("calories"), _calories );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("calories"), _calories );
+      }
    }
 }
 
@@ -1748,7 +1762,10 @@ void Recipe::recalcBoilGrav()
    if ( ret != _boilGrav )
    {
       _boilGrav = ret;
-      emit changed( metaProperty("boilGrav"), _boilGrav );
+      if (!_uninitializedCalcs)
+      {
+        emit changed( metaProperty("boilGrav"), _boilGrav );
+      }
    }
 }
 
@@ -1774,6 +1791,10 @@ void Recipe::recalcOgFg()
    // database, not use the initialized values of 1. I (maf) tried putting
    // this in the initialize, but it just hung. So I moved it here, but only
    // if if we aren't initialized yet.
+   //
+   // GSG: This doesn't work, this og and fg are already set to 1.0 so
+   // until we load these values from the database on startup, we have
+   // to calculate.
    if ( _uninitializedCalcs )
    {
       _og = Brewtarget::toDouble(this,"og","Recipe::recalcOgFg()");
@@ -1854,22 +1875,30 @@ void Recipe::recalcOgFg()
    if ( _og != tmp_og ) 
    {
       _og     = tmp_og;
-      // NOTE: We don't want to do this on the first load of the recipe. The
-      // _og is initialized to 1, and we calculate that to be something
-      // different. So this code is being triggered and the OG and FG are
-      // being updated for no good reason.
+      // NOTE: We don't want to do this on the first load of the recipe.
       // NOTE: We are we recalculating all of these on load? Shouldn't we be
       // reading these values from the database somehow?
-      set( "og", "og", _og, false );
-      emit changed( metaProperty("og"), _og );
-      emit changed( metaProperty("points"), (_og-1.0)*1e3 );
+      //
+      // GSG: Yes we can, but until the code is added to intialize these calculated
+      // values from the database, we can calculate them on load. They should be
+      // the same as the database values since the database values were set with
+      // these functions in the first place.
+      if (!_uninitializedCalcs)
+      {
+        set( "og", "og", _og, false );
+        emit changed( metaProperty("og"), _og );
+        emit changed( metaProperty("points"), (_og-1.0)*1e3 );
+      }
    }
 
    if ( tmp_fg != _fg ) 
    {
       _fg     = tmp_fg;
-      set( "fg", "fg", _fg, false );
-      emit changed( metaProperty("fg"), _fg );
+      if (!_uninitializedCalcs)
+      {
+        set( "fg", "fg", _fg, false );
+        emit changed( metaProperty("fg"), _fg );
+      }
    }
 }
 
@@ -2002,7 +2031,7 @@ QList<QString> Recipe::getReagents( QList<MashStep*> msteps )
 
    for ( int i = 0; i < msteps.size(); ++i )
    {
-      if( msteps[i]->type() != MashStep::Infusion )
+      if( ! msteps[i]->isInfusion() )
          continue;
 
       if ( i+1 < msteps.size() ) 

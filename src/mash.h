@@ -40,6 +40,8 @@ bool operator==(Mash &m1, Mash &m2);
 class Mash : public BeerXMLElement
 {
    Q_OBJECT
+   Q_CLASSINFO("signal", "mashs")
+   Q_CLASSINFO("prefix", "mash")
    
    friend class Database;
 public:
@@ -111,17 +113,6 @@ public slots:
 signals:
    //! \brief Emitted when \c name() changes.
    void changedName(QString);
-   /*
-   void changedGrainTemp_c(double);
-   void changedTunTemp_c(double);
-   void changedSpargeTemp_c(double);
-   void changedPh(double);
-   void changedTunWeight_kg(double);
-   void changedTunSpecificHeat_calGC(double);
-   void changedEquipAdjust(bool);
-   void changedTotalMashWater_l(double);
-   void changedTotalTime(double);
-   */
    
    // Emitted when the number of steps change, or when you should call mashSteps() again.
    void mashStepsChanged();

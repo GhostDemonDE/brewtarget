@@ -29,6 +29,9 @@
          <property name="title">
           <string>Required Fields</string>
          </property>
+         <property name="configSection" stdset="0">
+          <string notr="true">yeastEditor</string>
+         </property>
          <layout class="QVBoxLayout" name="verticalLayout">
           <property name="spacing">
            <number>0</number>
@@ -711,6 +714,11 @@
  </widget>
  <customwidgets>
   <customwidget>
+   <class>BtGenericEdit</class>
+   <extends>QLineEdit</extends>
+   <header>BtLineEdit.h</header>
+  </customwidget>
+  <customwidget>
    <class>BtTemperatureEdit</class>
    <extends>QLineEdit</extends>
    <header>BtLineEdit.h</header>
@@ -725,11 +733,6 @@
    <slots>
     <signal>labelChanged(Unit::unitDisplay,Unit::unitScale)</signal>
    </slots>
-  </customwidget>
-  <customwidget>
-   <class>BtGenericEdit</class>
-   <extends>QLineEdit</extends>
-   <header>BtLineEdit.h</header>
   </customwidget>
   <customwidget>
    <class>BtMixedLabel</class>
@@ -828,6 +831,22 @@
     <hint type="destinationlabel">
      <x>143</x>
      <y>275</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>checkBox_amountIsWeight</sender>
+   <signal>toggled(bool)</signal>
+   <receiver>lineEdit_amount</receiver>
+   <slot>setIsWeight(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>200</x>
+     <y>171</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>171</x>
+     <y>143</y>
     </hint>
    </hints>
   </connection>

@@ -101,7 +101,7 @@ void HopTableModel::observeDatabase(bool val)
       observeRecipe(0);
       removeAll();
       connect( &(Database::instance()), SIGNAL(newHopSignal(Hop*)), this, SLOT(addHop(Hop*)) );
-      connect( &(Database::instance()), SIGNAL(deletedHopSignal(Hop*)), this, SLOT(removeHop(Hop*)) );
+      connect( &(Database::instance()), SIGNAL(deletedSignal(Hop*)), this, SLOT(removeHop(Hop*)) );
       addHops( Database::instance().hops() );
    }
    else
@@ -295,7 +295,7 @@ QVariant HopTableModel::data( const QModelIndex& index, int role ) const
 
          scale = displayScale(col);
 
-         return QVariant( Brewtarget::displayAmount(row->time_min(), Units::minutes, 0, Unit::noUnit, scale) );
+         return QVariant( Brewtarget::displayAmount(row->time_min(), Units::minutes, 3, Unit::noUnit, scale) );
       case HOPFORMCOL:
         if ( role == Qt::DisplayRole )
           return QVariant( row->formStringTr() );
@@ -362,6 +362,8 @@ bool HopTableModel::setData( const QModelIndex& index, const QVariant& value, in
 
    row = hopObs[index.row()];
 
+   Unit::unitDisplay dspUnit = displayUnit(index.column());
+   Unit::unitScale   dspScl  = displayScale(index.column());
    switch( index.column() )
    {
       case HOPNAMECOL:
@@ -388,7 +390,7 @@ bool HopTableModel::setData( const QModelIndex& index, const QVariant& value, in
       case HOPAMOUNTCOL:
          retVal = value.canConvert(QVariant::String);
          if( retVal )
-            row->setAmount_kg( Brewtarget::qStringToSI(value.toString(), Units::kilograms, displayUnit(HOPAMOUNTCOL)));
+            row->setAmount_kg( Brewtarget::qStringToSI(value.toString(), Units::kilograms, dspUnit, dspScl));
          break;
       case HOPUSECOL:
          retVal = value.canConvert(QVariant::Int);
@@ -403,7 +405,7 @@ bool HopTableModel::setData( const QModelIndex& index, const QVariant& value, in
       case HOPTIMECOL:
          retVal = value.canConvert(QVariant::String);
          if( retVal )
-            row->setTime_min( Brewtarget::qStringToSI(value.toString(),Units::minutes));
+            row->setTime_min( Brewtarget::qStringToSI(value.toString(),Units::minutes,dspUnit,dspScl));
          break;
       default:
          Brewtarget::logW(QString("HopTableModel::setdata Bad column: %1").arg(index.column()));

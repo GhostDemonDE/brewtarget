@@ -248,7 +248,7 @@ void EquipmentEditor::doLayout()
                      lineEdit_topUpWater->setSizePolicy(sizePolicy2);
                      lineEdit_topUpWater->setMinimumSize(QSize(100, 0));
                      lineEdit_topUpWater->setMaximumSize(QSize(100, 16777215));
-                     lineEdit_topUpWater->setProperty("editField", QVariant(QStringLiteral("topUpKettle_l")));
+                     lineEdit_topUpWater->setProperty("editField", QVariant(QStringLiteral("topUpWater_l")));
                   label_absorption = new QLabel(groupBox_water);
                      label_absorption->setObjectName(QStringLiteral("label_absorption"));
                   lineEdit_grainAbsorption = new BtGenericEdit(groupBox_water);
@@ -599,17 +599,33 @@ void EquipmentEditor::save()
 
    double ga_LKg = grainAbs * volumeUnit->toSI(1.0) * weightUnit->fromSI(1.0);
 
+   QMessageBox::StandardButton ret;
+
    // Do some prewarning things. I would prefer to do this only on change, but
    // we need to be worried about new equipment too.
    if ( lineEdit_tunVolume->toSI() <= 0.001 )
-      QMessageBox::warning(this, tr("Tun Volume Warning"), tr("The tun volume you entered is 0. This may cause problems"));
+      ret = QMessageBox::warning(this,
+               tr("Tun Volume Warning"),
+               tr("The tun volume you entered is 0. This may cause problems"),
+               QMessageBox::Save | QMessageBox::Cancel,
+               QMessageBox::Save);
 
-   if ( lineEdit_batchSize->toSI() <= 0.001 )
-      QMessageBox::warning(this, tr("Batch Size Warning"), tr("The batch size you entered is 0. This may cause problems"));
+   if ( ret != QMessageBox::Cancel && lineEdit_batchSize->toSI() <= 0.001 )
+      ret = QMessageBox::warning(this,
+               tr("Batch Size Warning"),
+               tr("The batch size you entered is 0. This may cause problems"),
+               QMessageBox::Save | QMessageBox::Cancel,
+               QMessageBox::Save);
 
-   if ( lineEdit_hopUtilization->toSI() < 0.001 )
-      QMessageBox::warning(this, tr("Hop Utilization Warning"), tr("The hop utilization percentage you entered is 0. This may cause problems"));
+   if ( ret != QMessageBox::Cancel && lineEdit_hopUtilization->toSI() < 0.001 )
+      ret = QMessageBox::warning(this,
+               tr("Hop Utilization Warning"),
+               tr("The hop utilization percentage you entered is 0. This may cause problems"),
+               QMessageBox::Save | QMessageBox::Cancel,
+               QMessageBox::Save);
 
+   if ( ret == QMessageBox::Cancel )
+      return;
 
    obsEquip->setName( lineEdit_name->text() );
    obsEquip->setBoilSize_l( lineEdit_boilSize->toSI() );
@@ -638,6 +654,11 @@ void EquipmentEditor::save()
 
 void EquipmentEditor::newEquipment()
 {
+   newEquipment(QString());
+}
+
+void EquipmentEditor::newEquipment(QString folder)
+{
    QString name = QInputDialog::getText(this, tr("Equipment name"),
                                           tr("Equipment name:"));
    if( name.isEmpty() )
@@ -645,6 +666,9 @@ void EquipmentEditor::newEquipment()
 
    Equipment* e = Database::instance().newEquipment();
    e->setName( name );
+
+   if ( ! folder.isEmpty() )
+      e->setFolder(folder);
 
    setEquipment(e);
    show();

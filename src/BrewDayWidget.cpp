@@ -37,7 +37,7 @@
 
 // NOTE: QPrinter has no parent? Will it get destroyed properly?
 BrewDayWidget::BrewDayWidget(QWidget* parent) :
-   QWidget(parent), recObs(0), printer(new QPrinter()), doc(new QWebView(this))
+   QWidget(parent), recObs(0), printer(new QPrinter()), doc(new QTextBrowser(this))
 {
    setupUi(this);
 
@@ -96,7 +96,7 @@ void BrewDayWidget::removeSelectedInstruction()
       return;
    listWidget->takeItem(row);
    repopulateListWidget();
-   Database::instance().removeFromRecipe(recObs,recObs->instructions()[row]);
+   recObs->remove(recObs->instructions()[row]);
 }
 
 void BrewDayWidget::pushInstructionUp()
@@ -291,8 +291,10 @@ void BrewDayWidget::pushInstructionPrint()
    QString pDoc;
    QPrintDialog *dialog = new QPrintDialog(printer, this);
 
-   /* Instantiate the Webview and then connect its signal */
-   connect( doc, SIGNAL(loadFinished(bool)), this, SLOT(loadComplete(bool)) );
+   /* Instantiate the TextBrowser and then connect its signal */
+   // connect( doc, SIGNAL(loadFinished(bool)), this, SLOT(loadComplete(bool)) );
+   // GSG: QTextBrowser does not have a loadFinished signal.
+   // Also don't see where this is called anywhere else.
 
    dialog->setWindowTitle(tr("Print Document"));
    if (dialog->exec() != QDialog::Accepted)
@@ -310,6 +312,7 @@ void BrewDayWidget::pushInstructionPrint()
    pDoc += "</body></html>";
 
    doc->setHtml(pDoc);
+   loadComplete(true);
 }
 
 void BrewDayWidget::pushInstructionPreview()

@@ -64,6 +64,7 @@ class ScaleRecipeTool;
 class RecipeFormatter;
 class OgAdjuster;
 class ConverterTool;
+class HydrometerTool;
 class TimerMainDialog;
 class PrimingDialog;
 class StrikeWaterDialog;
@@ -143,8 +144,6 @@ public slots:
 
    //! \brief Update the main windows statusbar.
    void updateStatus(const QString status);
-   //! \brief Change unsaved status.
-   void updateUnsavedStatus(bool isUnsaved);
 
    //! \brief Close a brewnote tab if we must
    void closeBrewNote(BrewNote*);
@@ -213,12 +212,10 @@ public slots:
    void deleteSelected();
    void copySelected();
    void exportSelected();
+   void exportSelectedHtml();
 
    //! \brief Prints the right thing, depending on the signal sender.
    void print();
-   //! \brief saves the database, which will have some interesting
-   //implications later
-   void save();
    //! \brief Backup the database.
    void backup();
    //! \brief Restore the database.
@@ -305,6 +302,7 @@ private:
    RecipeFormatter* recipeFormatter;
    OgAdjuster* ogAdjuster;
    ConverterTool* converterTool;
+   HydrometerTool* hydrometerTool;
    TimerMainDialog* timerMainDialog;
    PrimingDialog* primingDialog;
    StrikeWaterDialog* strikeWaterDialog;
@@ -358,6 +356,7 @@ private:
 
    void convertedMsg();
    void importMsg();
+
 };
 
 #endif   /* _MAINWINDOW_H */

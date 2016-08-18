@@ -72,7 +72,7 @@ void MiscTableModel::observeDatabase(bool val)
       observeRecipe(0);
       removeAll();
       connect( &(Database::instance()), SIGNAL(newMiscSignal(Misc*)), this, SLOT(addMisc(Misc*)) );
-      connect( &(Database::instance()), SIGNAL(deletedMiscSignal(Misc*)), this, SLOT(removeMisc(Misc*)) );
+      connect( &(Database::instance()), SIGNAL(deletedSignal(Misc*)), this, SLOT(removeMisc(Misc*)) );
       addMiscs( Database::instance().miscs() );
    }
    else
@@ -215,7 +215,7 @@ QVariant MiscTableModel::data( const QModelIndex& index, int role ) const
 
          scale = displayScale(MISCTIMECOL);
 
-         return QVariant( Brewtarget::displayAmount(row->time(), Units::minutes, 0, Unit::noUnit, scale) );
+         return QVariant( Brewtarget::displayAmount(row->time(), Units::minutes, 3, Unit::noUnit, scale) );
       case MISCINVENTORYCOL:
          if( role != Qt::DisplayRole )
             return QVariant();
@@ -290,7 +290,6 @@ bool MiscTableModel::setData( const QModelIndex& index, const QVariant& value, i
    Misc *row;
    int col;
    QString tmpStr;
-   Unit::unitDisplay dispUnit;
    Unit* unit;
 
    if( index.row() >= (int)miscObs.size() )
@@ -300,6 +299,9 @@ bool MiscTableModel::setData( const QModelIndex& index, const QVariant& value, i
 
    col = index.column();
    unit = row->amountIsWeight() ? (Unit*)Units::kilograms : (Unit*)Units::liters;
+
+   Unit::unitDisplay dspUnit = displayUnit(index.column());
+   Unit::unitScale   dspScl  = displayScale(index.column());
 
    switch (col )
    {
@@ -326,22 +328,18 @@ bool MiscTableModel::setData( const QModelIndex& index, const QVariant& value, i
          if( ! value.canConvert(QVariant::String) )
             return false;
 
-         row->setTime( Brewtarget::qStringToSI(value.toString(), Units::minutes) );
+         row->setTime( Brewtarget::qStringToSI(value.toString(), Units::minutes, dspUnit, dspScl) );
          break;
       case MISCINVENTORYCOL:
          if( ! value.canConvert(QVariant::String) )
             return false;
 
-         dispUnit = displayUnit(col);
-
-         row->setInventoryAmount(Brewtarget::qStringToSI(value.toString(), unit, dispUnit));
+         row->setInventoryAmount(Brewtarget::qStringToSI(value.toString(), unit, dspUnit,dspScl));
       case MISCAMOUNTCOL:
          if( ! value.canConvert(QVariant::String) )
             return false;
 
-         dispUnit = displayUnit(col);
-
-         row->setAmount( Brewtarget::qStringToSI(value.toString(), unit, dispUnit ));
+         row->setAmount( Brewtarget::qStringToSI(value.toString(), unit, dspUnit,dspScl ));
          break;
       case MISCISWEIGHT:
          if( ! value.canConvert(QVariant::Int) )

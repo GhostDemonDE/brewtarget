@@ -51,8 +51,8 @@ RecipeFormatter::RecipeFormatter(QObject* parent)
    docDialog = new QDialog(Brewtarget::mainWindow());
    docDialog->setWindowTitle("Print Preview");
    if( docDialog->layout() == 0 )
-      docDialog->setLayout(new QVBoxLayout(docDialog));
-   doc = new QWebView(docDialog);
+      docDialog->setLayout(new QVBoxLayout);
+   doc = new QTextBrowser(docDialog);
    docDialog->layout()->addWidget(doc);
    /*
    // Add a print button at the bottom.
@@ -150,11 +150,70 @@ QString RecipeFormatter::getTextSeparator()
    return *textSeparator;
 }
 
+QString RecipeFormatter::buildHTMLHeader() {
+    QString header;
+
+   header = "<!DOCTYPE HTML PUBLIC \"-//W3C//DTD HTML 4.0//EN\" \"http://www.w3.org/TR/1998/REC-html40-19980424/strict.dtd\">"
+            "<html>";
+   header += "<head>";
+   // NOTE: the meta tag is not closed, because we need HTML4 compliance, and that's just the way it is.
+   header += "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\">";
+   // The head tag requires a title.
+   // TODO: think of a title
+   header += "<title></title>";
+
+   header += "<style type=\"text/css\">";
+   header += getCSS(":css/recipe.css");
+   header += "</style></head>";
+
+   header += "<body>";
+
+   return header;
+}
+
+QString RecipeFormatter::buildHTMLFooter() {
+    return "</div></body></html>";
+}
+
+QString RecipeFormatter::getHTMLFormat( QList<Recipe*> recipes ) {
+   Recipe *current = rec;
+   QString hDoc;
+
+   hDoc = buildHTMLHeader();
+
+   // build a toc -- why do I do this to myself?
+   hDoc += "<ul>";
+   foreach ( Recipe* foo, recipes ) {
+       hDoc += QString("<li><a href=\"#%1\">%1</a></li>").arg(foo->name());
+   }
+   hDoc += "</ul>";
+
+   foreach (Recipe* foo, recipes) {
+      rec = foo;
+      hDoc += QString("<a name=\"%1\"></a>").arg(foo->name());
+      hDoc += buildStatTableHtml();
+      hDoc += buildFermentableTableHtml();
+      hDoc += buildHopsTableHtml();
+      hDoc += buildMiscTableHtml();
+      hDoc += buildYeastTableHtml();
+      hDoc += buildMashTableHtml();
+      hDoc += buildNotesHtml();
+      hDoc += buildInstructionTableHtml();
+      hDoc += buildBrewNotesHtml();
+      hDoc += "<p></p>";
+   }
+   hDoc += buildHTMLFooter();
+
+   rec = current;
+   return hDoc;
+}
+
 QString RecipeFormatter::getHTMLFormat()
 {
    QString pDoc;
 
-   pDoc = buildStatTableHtml();
+   pDoc = buildHTMLHeader();
+   pDoc += buildStatTableHtml();
    pDoc += buildFermentableTableHtml();
    pDoc += buildHopsTableHtml();
    pDoc += buildMiscTableHtml();
@@ -164,7 +223,7 @@ QString RecipeFormatter::getHTMLFormat()
    pDoc += buildInstructionTableHtml();
    pDoc += buildBrewNotesHtml();
 
-   pDoc += "</div></body></html>";
+   pDoc += buildHTMLFooter();
 
    return pDoc;
 }
@@ -241,12 +300,11 @@ QString RecipeFormatter::getToolTip(Recipe* rec)
    if ( rec == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
    style = rec->style();
 
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -290,11 +348,9 @@ QString RecipeFormatter::getToolTip(Style* style)
    if ( style == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
-
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -335,11 +391,9 @@ QString RecipeFormatter::getToolTip(Equipment* kit)
    if ( kit == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
-
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -372,11 +426,9 @@ QString RecipeFormatter::getToolTip(Fermentable* ferm)
    if ( ferm == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
-
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -415,11 +467,9 @@ QString RecipeFormatter::getToolTip(Hop* hop)
    if ( hop == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
-
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -459,11 +509,9 @@ QString RecipeFormatter::getToolTip(Misc* misc)
    if ( misc == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
-
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -495,11 +543,9 @@ QString RecipeFormatter::getToolTip(Yeast* yeast)
    if ( yeast == 0 )
       return "";
 
-   cssName = QString(":/css/tooltip.css");
-
    // Do the style sheet first
    header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
+   header += getCSS(":/css/tooltip.css");
    header += "</style></head>";
 
    body   = "<body>";
@@ -614,12 +660,10 @@ QString RecipeFormatter::wrapText( const QString &text, int wrapLength )
    return wrappedText;
 }
 
-QString RecipeFormatter::getCSS()
+QString RecipeFormatter::getCSS(QString resourceName)
 {
-   if ( cssName == NULL )
-       cssName = QString(":/css/recipe.css");
 
-   QFile cssInput(cssName);
+   QFile cssInput(resourceName);
    QString css;
 
    if (cssInput.open(QFile::ReadOnly)) {
@@ -643,25 +687,25 @@ QString RecipeFormatter::buildStatTableHtml()
 
    style = rec->style();
 
-   // Do the style sheet first
-   header = "<html><head><style type=\"text/css\">";
-   header += getCSS();
-   header += "</style></head>";
-
-   body   = "<body>";
-   //body += QString("<h1>%1</h1>").arg(rec->getName()());
    body += QString("<div id=\"headerdiv\">");
-   body += QString("<table id=\"header\">");
-   body += QString("<caption>%1 - %2 (%3%4)</caption>")
+   // NOTE: QTextBrowser does not support the caption tag
+   body += QString("<h1>%1 - %2 (%3%4)</h1>")
          .arg( rec->name())
          .arg( style ? style->name() : tr("unknown style"))
          .arg( style ? style->categoryNumber() : tr("N/A") )
          .arg( style ? style->styleLetter() : "" );
 
-   body += QString("<tr><td class=\"label\">%1</td><td class=\"value\">%2</td></tr>")
+   body += QString("<table id=\"header\">");
+   body += QString("<tr>"
+                   "<td class=\"label\">%1</td>"
+                   "<td class=\"value\">%2</td>"
+                   "</tr>")
            .arg(tr("Brewer"))
            .arg(rec->brewer());
-   body += QString("<tr><td class=\"label\">%1</td><td class=\"value \">%2</td></tr>")
+   body += QString("<tr>"
+                   "<td class=\"label\">%1</td>"
+                   "<td class=\"value \">%2</td>"
+                   "</tr>")
            .arg(tr("Date"))
            .arg(Brewtarget::displayDate(rec->date()));
    body += "</table>";
@@ -673,46 +717,62 @@ QString RecipeFormatter::buildStatTableHtml()
    // estimated) sizes
 
    body += "<table id=\"title\">";
-   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2</td>")
+   body += QString("<tr>"
+                   "<td align=\"left\" class=\"left\">%1</td>"
+                   "<td width=\"20%\" class=\"value\">%2</td>")
            .arg(tr("Batch Size"))
            .arg(Brewtarget::displayAmount(rec->finalVolume_l(), "tab_recipe", "finalVolume_l", Units::liters));
-   body += QString("<td class=\"right\">%1</td><td class=\"value\">%2</td></tr>")
+   body += QString("<td width=\"40%\" align=\"right\" class=\"right\">%1</td>"
+                   "<td class=\"value\">%2</td>"
+                   "</tr>")
            .arg(tr("Boil Size"))
            .arg(Brewtarget::displayAmount(rec->boilVolume_l(), "tab_recipe", "boilVolume_l", Units::liters));
    // Second row: Boil Time and Efficiency
-   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2</td>")
+   body += QString("<tr>"
+                   "<td align=\"left\" class=\"left\">%1</td>"
+                   "<td class=\"value\">%2</td>")
            .arg(tr("Boil Time"))
            .arg( (rec->equipment() == 0)?
                    Brewtarget::displayAmount(0, "tab_recipe", "boilTime_min", Units::minutes)
                  : Brewtarget::displayAmount( (rec->equipment())->boilTime_min(), "tab_recipe", "boilTime_min", Units::minutes));
-   body += QString("<td class=\"right\">%1</td><td class=\"value\">%2%</td></tr>")
+   body += QString("<td align=\"right\" class=\"right\">%1</td>"
+                   "<td class=\"value\">%2</td></tr>")
            .arg(tr("Efficiency"))
            .arg(rec->efficiency_pct(), 0, 'f', 0);
 
    // Third row: OG and FG
-   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2</td>")
+   body += QString("<tr>"
+                   "<td align=\"left\" class=\"left\">%1</td>"
+                   "<td class=\"value\">%2</td>")
            .arg(tr("OG"))
            .arg(Brewtarget::displayAmount(rec->og(), "tab_recipe", "og", Units::sp_grav, 3));
-   body += QString("<td class=\"right\">%1</td><td class=\"value\">%2</td></tr>")
+   body += QString("<td align=\"right\" class=\"right\">%1</td>"
+                   "<td class=\"value\">%2</td></tr>")
            .arg(tr("FG"))
            .arg(Brewtarget::displayAmount(rec->fg(), "tab_recipe", "fg", Units::sp_grav, 3));
 
    // Fourth row: ABV and Bitterness.  We need to set the bitterness string up first
-   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2%</td>")
+   body += QString("<tr>"
+                   "<td align=\"left\" class=\"left\">%1</td>"
+                   "<td class=\"value\">%2%</td>")
            .arg(tr("ABV"))
            .arg(Brewtarget::displayAmount(rec->ABV_pct(), 0, 1));
-   body += QString("<td class=\"right\">%1</td><td class=\"value\">%2 (%3)</td></tr>")
+   body += QString("<td align=\"right\" class=\"right\">%1</td>"
+                   "<td class=\"value\">%2 (%3)</td></tr>")
            .arg(tr("IBU"))
            .arg(Brewtarget::displayAmount(rec->IBU(), 0, 1))
            .arg(Brewtarget::ibuFormulaName() );
 
    // Fifth row: Color and calories.  Set up the color string first
-   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2 (%3)</td>")
+   body += QString("<tr>"
+                   "<td align=\"left\" class=\"left\">%1</td>"
+                   "<td class=\"value\">%2 (%3)</td>")
            .arg(tr("Color"))
            .arg(Brewtarget::displayAmount(rec->color_srm(),"tab_recipe", "color_srm", Units::srm, 1))
            .arg(Brewtarget::colorFormulaName());
            
-   body += QString("<td class=\"right\">%1</td><td class=\"value\">%2</td></tr>")
+   body += QString("<td align=\"right\" class=\"right\">%1</td>"
+                   "<td class=\"value\">%2</td></tr>")
            .arg( Brewtarget::getVolumeUnitSystem() == SI ? tr("Estimated calories (per 33 cl)") : tr("Estimated calories (per 12 oz)"))
            .arg( Brewtarget::displayAmount(Brewtarget::getVolumeUnitSystem() == SI ? rec->calories33cl() : rec->calories12oz(),0,0) );
 
@@ -781,11 +841,16 @@ QString RecipeFormatter::buildFermentableTableHtml()
 
    ftable = QString("<h3>%1</h3>").arg(tr("Fermentables"));
    ftable += QString("<table id=\"fermentables\">");
-   ftable += QString("<caption>%1 %2</caption>")
-                  .arg(tr("Total grain:"))
-                  .arg(Brewtarget::displayAmount(rec->grains_kg(), "fermentableTable", "amount_kg", Units::kilograms));
    // Set up the header row.
-   ftable += QString("<tr><th>%1</th><th>%2</th><th>%3</th><th>%4</th><th>%5</th><th>%6</th><th>%7</th></tr>")
+   ftable += QString("<tr>"
+                     "<th align=\"left\" width=\"20%\">%1</th>"
+                     "<th align=\"left\" width=\"10%\">%2</th>"
+                     "<th align=\"left\" width=\"10%\">%3</th>"
+                     "<th align=\"left\" width=\"10%\">%4</th>"
+                     "<th align=\"left\" width=\"10%\">%5</th>"
+                     "<th align=\"left\" width=\"10%\">%6</th>"
+                     "<th align=\"left\" width=\"10%\">%7</th>"
+                     "</tr>")
          .arg(tr("Name"))
          .arg(tr("Type"))
          .arg(tr("Amount"))
@@ -797,8 +862,7 @@ QString RecipeFormatter::buildFermentableTableHtml()
    for(i=0; i < size; ++i)
    {
       Fermentable* ferm = ferms[i];
-      ftable += "<tr>";
-      ftable += QString("<td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td><td>%6%</td><td>%7</td>")
+      ftable += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td><td>%6%</td><td>%7</td></tr>")
             .arg( ferm->name())
             .arg( ferm->typeStringTr())
             .arg( Brewtarget::displayAmount(ferm->amount_kg(), "fermentableTable", "amount_kg", Units::kilograms))
@@ -806,8 +870,16 @@ QString RecipeFormatter::buildFermentableTableHtml()
             .arg( ferm->addAfterBoil() ? tr("Yes") : tr("No"))
             .arg( Brewtarget::displayAmount(ferm->yield_pct(), 0, 0) )
             .arg( Brewtarget::displayAmount(ferm->color_srm(), "fermentableTable", "color_srm", Units::srm, 1));
-      ftable += "</tr>";
    }
+   // One row for the total grain (QTextBrowser does not know the caption tag)
+   ftable += QString("<tr><td><b>%1</b></td><td>%2</td><td>%3</td><td>%4</td><td>%5</td><td>%6</td><td>%7</td></tr>")
+            .arg(tr("Total"))
+            .arg("&mdash;" )
+            .arg(Brewtarget::displayAmount(rec->grains_kg(), "fermentableTable", "amount_kg", Units::kilograms))
+            .arg("&mdash;")
+            .arg("&mdash;")
+            .arg("&mdash;")
+            .arg("&mdash;");
    ftable += "</table>";
    return ftable;
 }
@@ -878,7 +950,15 @@ QString RecipeFormatter::buildHopsTableHtml()
    hTable = QString("<h3>%1</h3>").arg(tr("Hops"));
    hTable += QString("<table id=\"hops\">");
    // Set up the header row.
-   hTable += QString("<tr><th>%1</th><th>%2</th><th>%3</th><th>%4</th><th>%5</th><th>%6</th><th>%7</th></tr>")
+   hTable += QString("<tr>"
+                     "<th align=\"left\" width=\"20%\">%1</th>"
+                     "<th align=\"left\" width=\"10%\">%2</th>"
+                     "<th align=\"left\" width=\"10%\">%3</th>"
+                     "<th align=\"left\" width=\"10%\">%4</th>"
+                     "<th align=\"left\" width=\"10%\">%5</th>"
+                     "<th align=\"left\" width=\"10%\">%6</th>"
+                     "<th align=\"left\" width=\"10%\">%7</th>"
+                     "</tr>")
          .arg(tr("Name"))
          .arg(tr("Alpha"))
          .arg(tr("Amount"))
@@ -898,7 +978,6 @@ QString RecipeFormatter::buildHopsTableHtml()
             .arg( Brewtarget::displayAmount(hop->time_min(), "hopTable", "time_min", Units::minutes))
             .arg( hop->formStringTr())
             .arg( Brewtarget::displayAmount(rec->ibuFromHop(hop), 0, 1) );
-      hTable += "</tr>";
    }
    hTable += "</table>";
    return hTable;
@@ -970,7 +1049,13 @@ QString RecipeFormatter::buildMiscTableHtml()
    mtable = QString("<h3>%1</h3>").arg(tr("Misc"));
    mtable += QString("<table id=\"misc\">");
    // Set up the header row.
-   mtable += QString("<tr><th>%1</th><th>%2</th><th>%3</th><th>%4</th><th>%5</th></tr>")
+   mtable += QString("<tr>"
+                     "<th align=\"left\" width=\"20%\">%1</th>"
+                     "<th align=\"left\" width=\"10%\">%2</th>"
+                     "<th align=\"left\" width=\"10%\">%3</th>"
+                     "<th align=\"left\" width=\"10%\">%4</th>"
+                     "<th align=\"left\" width=\"10%\">%5</th>"
+                     "</tr>")
          .arg(tr("Name"))
          .arg(tr("Type"))
          .arg(tr("Use"))
@@ -981,13 +1066,12 @@ QString RecipeFormatter::buildMiscTableHtml()
       Misc *misc = miscs[i];
       kindOf = misc->amountIsWeight() ? (Unit*)Units::kilograms : (Unit*)Units::liters;
 
-      mtable += QString("<td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td>")
+      mtable += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td>%4</td><td>%5</td></tr>")
             .arg( misc->name())
             .arg( misc->typeStringTr())
             .arg( misc->useStringTr())
             .arg( Brewtarget::displayAmount(misc->amount(), "miscTableModel", "amount_kg", kindOf, 3))
             .arg( Brewtarget::displayAmount(misc->time(), "miscTableModel", "time", Units::minutes));
-      mtable += "</tr>";
    }
    mtable += "</table>";
    return mtable;
@@ -1055,7 +1139,12 @@ QString RecipeFormatter::buildYeastTableHtml()
    ytable = QString("<h3>%1</h3>").arg(tr("Yeast"));
    ytable += QString("<table id=\"yeast\">");
    // Set up the header row.
-   ytable += QString("<tr><th>%1</th><th>%2</th><th>%3</th><th>%4</th><th>%5</th></tr>")
+   ytable += QString("<tr>"
+                     "<th width=\"20%\" align=\"left\">%1</th>"
+                     "<th width=\"10%\" align=\"left\">%2</th>"
+                     "<th width=\"10%\" align=\"left\">%3</th>"
+                     "<th width=\"10%\" align=\"left\">%4</th>"
+                     "<th width=\"10%\" align=\"left\">%5</th></tr>")
          .arg(tr("Name"))
          .arg(tr("Type"))
          .arg(tr("Form"))
@@ -1072,7 +1161,6 @@ QString RecipeFormatter::buildYeastTableHtml()
             .arg( y->formStringTr())
             .arg( Brewtarget::displayAmount( y->amount(), "yeastTableModel", "amount_kg", kindOf, 2) )
             .arg( y->addToSecondary() ? tr("Secondary") : tr("Primary"));
-      ytable += "</tr>";
    }
    ytable += "</table>";
    return ytable;
@@ -1142,7 +1230,14 @@ QString RecipeFormatter::buildMashTableHtml()
    mtable += "<table id=\"mash\">";
 
    // Header row.
-   mtable += QString("<tr><th>%1</th><th>%2</th><th>%3</th><th>%4</th><th>%5</th><th>%6</th></tr>")
+   mtable += QString("<tr>"
+                     "<th align=\"left\" width=\"20%\">%1</th>"
+                     "<th align=\"left\" width=\"10%\">%2</th>"
+                     "<th align=\"left\" width=\"10%\">%3</th>"
+                     "<th align=\"left\" width=\"10%\">%4</th>"
+                     "<th align=\"left\" width=\"10%\">%5</th>"
+                     "<th align=\"left\" width=\"10%\">%6</th>"
+                     "</tr>")
              .arg( tr("Name") )
              .arg(tr("Type"))
              .arg(tr("Amount"))
@@ -1157,12 +1252,12 @@ QString RecipeFormatter::buildMashTableHtml()
              .arg(ms->name())
              .arg(ms->typeStringTr());
 
-      if( ms->type() == MashStep::Infusion )
+      if( ms->isInfusion() )
       {
          tmp = tmp.arg(Brewtarget::displayAmount(ms->infuseAmount_l(), "mashStepTableModel", "amount", Units::liters))
                   .arg(Brewtarget::displayAmount(ms->infuseTemp_c(),   "mashStepTableModel", "infuseTemp_c", Units::celsius));
       }
-      else if( ms->type() == MashStep::Decoction )
+      else if( ms->isDecoction() )
       {
          tmp = tmp.arg( Brewtarget::displayAmount( ms->decoctionAmount_l(), "mashStepTableModel", "amount", Units::liters ) )
                .arg("---");
@@ -1211,12 +1306,12 @@ QString RecipeFormatter::buildMashTableTxt()
          MashStep* s = mashSteps[i];
          names.append(s->name());
          types.append(s->typeStringTr());
-         if( s->type() == MashStep::Infusion )
+         if( s->isInfusion() )
          {
             amounts.append(Brewtarget::displayAmount(s->infuseAmount_l(), "mashStepTableModel", "amount", Units::liters));
             temps.append(Brewtarget::displayAmount(s->infuseTemp_c(),   "mashStepTableModel", "infuseTemp_c", Units::celsius));
          }
-         else if( s->type() == MashStep::Decoction )
+         else if( s->isDecoction() )
          {
             amounts.append(Brewtarget::displayAmount(s->decoctionAmount_l(), "mashStepTableModel", "amount", Units::liters));
             temps.append("---");
@@ -1403,10 +1498,58 @@ QString RecipeFormatter::buildBrewNotesHtml()
    return bnTable;
 }
 
+QString RecipeFormatter::getLabelToolTip() {
+   QString header;
+   QString body;
+
+   // Do the style sheet first
+   header = "<html><head><style type=\"text/css\">";
+   header += getCSS(":/css/tooltip.css");
+   header += "</style></head>";
+
+   body   = "<body>";
+   body += QString("<div id=\"headerdiv\">");
+   body += QString("<table id=\"tooltip\">");
+   body += QString("<caption>%1</caption>")
+         .arg( "Using PostgreSQL");
+
+   // First row -- hostname and port
+   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2</td>")
+         .arg(tr("Hostname"))
+         .arg(Brewtarget::option("dbHostname").toString());
+   body += QString("<td class=\"left\">%1</td><td class=\"value\">%2</td></tr>")
+         .arg(tr("Port"))
+         .arg(Brewtarget::option("dbPortnum").toInt());
+   // Second row -- schema and database
+   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2</td>")
+         .arg(tr("Schema"))
+         .arg(Brewtarget::option("dbSchema").toString());
+   body += QString("<td class=\"left\">%1</td><td class=\"value\">%2</td></tr>")
+         .arg(tr("Database"))
+         .arg(Brewtarget::option("dbName").toString());
+
+   // third row -- username and is the password saved (NOTE: NOT THE
+   // PASSWORD ITSELF)
+   body += QString("<tr><td class=\"left\">%1</td><td class=\"value\">%2</td>")
+         .arg(tr("Username"))
+         .arg(Brewtarget::option("dbUsername").toString());
+   body += QString("<td class=\"left\">%1</td><td class=\"value\">%2</td></tr>")
+         .arg(tr("Saved Password"))
+         .arg( Brewtarget::hasOption("dbPassword") ? "Yes" : "No");
+
+
+   body += "</table></body></html>";
+
+   return header + body;
+}
+
+
 bool RecipeFormatter::loadComplete(bool ok)
 {
    doc->print(printer);
-   disconnect( doc, SIGNAL(loadFinished(bool)), this, SLOT(loadComplete(bool)) );
+   // disconnect( doc, SIGNAL((bool)), this, SLOT(loadComplete(bool)) );
+   //
+   // GSG: Part of fix for #263
    return ok;
 }
 
@@ -1431,7 +1574,12 @@ void RecipeFormatter::print(QPrinter* mainPrinter, QPrintDialog *dialog,
       dialog->setWindowTitle(tr("Print Document"));
       if (dialog->exec() != QDialog::Accepted)
          return;
-      connect( doc, SIGNAL(loadFinished(bool)), this, SLOT(loadComplete(bool)) );
+      //connect( doc, SIGNAL((bool)), this, SLOT(loadComplete(bool)) );
+      //
+      //GSG: My guess is that we used QWebView in the past and updated to QTextBrowser.
+      // QTextBrowser doesn't have a  signal.
+      doc->setHtml(getHTMLFormat());
+      loadComplete(true);
    }
 
    doc->setHtml(getHTMLFormat());

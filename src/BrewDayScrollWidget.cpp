@@ -35,7 +35,7 @@
 #include "mash.h"
 
 BrewDayScrollWidget::BrewDayScrollWidget(QWidget* parent)
-   : QWidget(parent), doc(new QWebView())
+   : QWidget(parent), doc(new QTextBrowser())
 {
    setupUi(this);
    setObjectName("BrewDayScrollWidget");
@@ -93,7 +93,7 @@ void BrewDayScrollWidget::removeSelectedInstruction()
    int row = listWidget->currentRow();
    if( row < 0 )
       return;
-   Database::instance().removeFromRecipe(recObs, recIns[row]);
+   recObs->remove(recIns[row]);
 
    if(recIns.isEmpty())
    {
@@ -148,7 +148,9 @@ void BrewDayScrollWidget::print(QPrinter *mainPrinter, QPrintDialog* dialog,
    if ( action == PRINT )
    {
       printer = mainPrinter;
-      connect( doc, SIGNAL(loadFinished(bool)), this, SLOT(loadComplete(bool)) );
+      // connect( doc, SIGNAL(loadFinished(bool)), this, SLOT(loadComplete(bool)) );
+      //
+      // GSG: QTextBrowser doesn't have a loadFinished signal.
 
       dialog->setWindowTitle(tr("Print Document"));
       if (dialog->exec() != QDialog::Accepted)
@@ -175,6 +177,10 @@ void BrewDayScrollWidget::print(QPrinter *mainPrinter, QPrintDialog* dialog,
       QTextStream out(outFile);
       out << pDoc;
       outFile->close();
+   }
+   else
+   {
+       loadComplete(true);
    }
 }
 

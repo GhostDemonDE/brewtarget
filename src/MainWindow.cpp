@@ -91,6 +91,7 @@
 #include "OptionDialog.h"
 #include "OgAdjuster.h"
 #include "ConverterTool.h"
+#include "HydrometerTool.h"
 #include "TimerMainDialog.h"
 #include "RecipeFormatter.h"
 #include "PrimingDialog.h"
@@ -136,8 +137,9 @@ MainWindow::MainWindow(QWidget* parent)
 
    QDesktopWidget *desktop = QApplication::desktop();
 
-   // Ensure database initializes.
-   Database::instance();
+   // If the database doesn't load, we bail
+   if (! Database::instance().loadSuccessful() )
+      exit(1);
 
    // Set the window title.
    setWindowTitle( QString("Brewtarget - %1").arg(VERSIONSTRING) );
@@ -177,6 +179,7 @@ MainWindow::MainWindow(QWidget* parent)
    recipeFormatter = new RecipeFormatter(this);
    ogAdjuster = new OgAdjuster(this);
    converterTool = new ConverterTool(this);
+   hydrometerTool = new HydrometerTool(this);
    timerMainDialog = new TimerMainDialog(this);
    primingDialog = new PrimingDialog(this);
    strikeWaterDialog = new StrikeWaterDialog(this);
@@ -324,8 +327,8 @@ MainWindow::MainWindow(QWidget* parent)
    fileSaver->setDefaultSuffix(QString("xml"));
 
    // Do some magic on the splitter widget to keep the tree from expanding
-   splitter_2->setStretchFactor(0,0);
-   splitter_2->setStretchFactor(1,1);
+   splitter_vertical->setStretchFactor(0,0);
+   splitter_vertical->setStretchFactor(1,1);
 
    // Once more with the context menus too
    setupContextMenu();
@@ -362,6 +365,28 @@ MainWindow::MainWindow(QWidget* parent)
          setRecipe( recs[0] );
    }
 
+   //UI restore state
+   if (Brewtarget::hasOption("MainWindow/splitter_vertical_State"))
+      splitter_vertical->restoreState(Brewtarget::option("MainWindow/splitter_vertical_State").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/splitter_horizontal_State"))
+      splitter_horizontal->restoreState(Brewtarget::option("MainWindow/splitter_horizontal_State").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_recipe_headerState"))
+      treeView_recipe->header()->restoreState(Brewtarget::option("MainWindow/treeView_recipe_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_style_headerState"))
+      treeView_style->header()->restoreState(Brewtarget::option("MainWindow/treeView_style_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_equip_headerState"))
+      treeView_equip->header()->restoreState(Brewtarget::option("MainWindow/treeView_equip_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_ferm_headerState"))
+      treeView_ferm->header()->restoreState(Brewtarget::option("MainWindow/treeView_ferm_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_hops_headerState"))
+      treeView_hops->header()->restoreState(Brewtarget::option("MainWindow/treeView_hops_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_misc_headerState"))
+      treeView_misc->header()->restoreState(Brewtarget::option("MainWindow/treeView_misc_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/treeView_yeast_headerState"))
+      treeView_yeast->header()->restoreState(Brewtarget::option("MainWindow/treeView_yeast_headerState").toByteArray());
+   if (Brewtarget::hasOption("MainWindow/mashStepTableWidget_headerState"))
+      mashStepTableWidget->horizontalHeader()->restoreState(Brewtarget::option("MainWindow/mashStepTableWidget_headerState").toByteArray());
+
    // Connect signals.
    // actions
    connect( actionExit, SIGNAL( triggered() ), this, SLOT( close() ) );
@@ -381,9 +406,8 @@ MainWindow::MainWindow(QWidget* parent)
    connect( actionScale_Recipe, SIGNAL( triggered() ), recipeScaler, SLOT( show() ) );
    connect( action_recipeToTextClipboard, SIGNAL( triggered() ), recipeFormatter, SLOT( toTextClipboard() ) );
    connect( actionConvert_Units, SIGNAL( triggered() ), converterTool, SLOT( show() ) );
+   connect( actionHydrometer_Temp_Adjustment, SIGNAL( triggered() ), hydrometerTool, SLOT( show() ) );
    connect( actionOG_Correction_Help, SIGNAL( triggered() ), ogAdjuster, SLOT( show() ) );
-   connect( actionBackup_Database, SIGNAL( triggered() ), this, SLOT( backup() ) );
-   connect( actionRestore_Database, SIGNAL( triggered() ), this, SLOT( restoreFromBackup() ) );
    connect( actionCopy_Recipe, SIGNAL( triggered() ), this, SLOT( copyRecipe() ) );
    connect( actionPriming_Calculator, SIGNAL( triggered() ), primingDialog, SLOT( show() ) );
    connect( actionStrikeWater_Calculator, SIGNAL( triggered() ), strikeWaterDialog, SLOT( show() ) );
@@ -392,8 +416,18 @@ MainWindow::MainWindow(QWidget* parent)
    connect( actionMergeDatabases, SIGNAL(triggered()), this, SLOT(updateDatabase()) );
    connect( actionTimers, SIGNAL(triggered()), timerMainDialog, SLOT(show()) );
    connect( actionDeleteSelected, SIGNAL(triggered()), this, SLOT(deleteSelected()) );
-   connect( actionSave, SIGNAL(triggered()), this, SLOT(save()) );
 
+   // postgresql cannot backup or restore yet. I would like to find some way
+   // around this, but for now just disable
+   if ( Brewtarget::dbType() == Brewtarget::PGSQL ) {
+      actionBackup_Database->setEnabled(false);
+      actionRestore_Database->setEnabled(false);
+      label_Brewtarget->setToolTip( recipeFormatter->getLabelToolTip());
+   }
+   else {
+      connect( actionBackup_Database, SIGNAL( triggered() ), this, SLOT( backup() ) );
+      connect( actionRestore_Database, SIGNAL( triggered() ), this, SLOT( restoreFromBackup() ) );
+   }
    // Printing signals/slots.
    // Refactoring is good.  It's like a rye saison fermenting away
    connect( actionRecipePrint, SIGNAL(triggered()), this, SLOT(print()));
@@ -460,15 +494,13 @@ MainWindow::MainWindow(QWidget* parent)
 
    // No connections from the database yet? Oh FSM, that probably means I'm
    // doing it wrong again.
-   connect( &(Database::instance()), SIGNAL( deletedBrewNoteSignal(BrewNote*)), this, SLOT( closeBrewNote(BrewNote*)));
-   connect( &(Database::instance()), SIGNAL( isUnsavedChanged(bool)), this, SLOT( updateUnsavedStatus(bool)));
+   connect( &(Database::instance()), SIGNAL( deletedSignal(BrewNote*)), this, SLOT( closeBrewNote(BrewNote*)));
 }
 
 void MainWindow::setupShortCuts()
 {
    actionNewRecipe->setShortcut(QKeySequence::New);
    actionCopy_Recipe->setShortcut(QKeySequence::Copy);
-   actionSave->setShortcut(QKeySequence::Save);
    actionDeleteSelected->setShortcut(QKeySequence::Delete);
 }
 
@@ -852,10 +884,16 @@ void MainWindow::showChanges(QMetaProperty* prop)
 
    // See if we need to change the mash in the table.
    if( (updateAll && recipeObs->mash()) ||
-       (propName == "mash" &&
-       recipeObs->mash()) )
+       (propName == "mash" && recipeObs->mash()) )
    {
       mashStepTableModel->setMash(recipeObs->mash());
+   }
+
+   // Not sure about this, but I am annoyed that modifying the hop usage
+   // modifiers isn't automatically updating my display
+   if ( updateAll ) {
+     recipeObs->acceptHopChange( recipeObs->metaProperty("hops"), QVariant());
+     hopTableProxy->invalidate();
    }
 }
 
@@ -1227,7 +1265,7 @@ void MainWindow::removeSelectedFermentable()
     for(i = 0; i < itemsToRemove.size(); i++)
     {
         fermTableModel->removeFermentable(itemsToRemove.at(i));
-        recipeObs->removeFermentable(itemsToRemove.at(i));
+        recipeObs->remove(itemsToRemove.at(i));
     }
 }
 
@@ -1295,7 +1333,7 @@ void MainWindow::removeSelectedHop()
     for(i = 0; i < itemsToRemove.size(); i++)
     {
         hopTableModel->removeHop(itemsToRemove.at(i));
-        recipeObs->removeHop(itemsToRemove.at(i));
+        recipeObs->remove(itemsToRemove.at(i));
     }
 
 }
@@ -1324,7 +1362,7 @@ void MainWindow::removeSelectedMisc()
     for(i = 0; i < itemsToRemove.size(); i++)
     {
        miscTableModel->removeMisc(itemsToRemove.at(i));
-       recipeObs->removeMisc(itemsToRemove.at(i));
+       recipeObs->remove(itemsToRemove.at(i));
     }
 }
 
@@ -1351,7 +1389,7 @@ void MainWindow::removeSelectedYeast()
     for(i = 0; i < itemsToRemove.size(); i++)
     {
        yeastTableModel->removeYeast(itemsToRemove.at(i));
-       recipeObs->removeYeast(itemsToRemove.at(i));
+       recipeObs->remove(itemsToRemove.at(i));
     }
 }
 
@@ -1367,6 +1405,12 @@ void MainWindow::newRecipe()
 
    Recipe* newRec = Database::instance().newRecipe();
 
+   // bad things happened -- let somebody know
+   if ( ! newRec ) {
+      QMessageBox::warning(this,tr("Error copying recipe"), 
+                           tr("An error was returned while creating %1").arg(name));
+      return;
+   }
    // Set the following stuff so everything appears nice
    // and the calculations don't divide by zero... things like that.
    newRec->setName(name);
@@ -1862,11 +1906,6 @@ void MainWindow::removeMash()
 
 }
 
-void MainWindow::save()
-{
-   Database::instance().saveDatabase();
-}
-
 void MainWindow::closeEvent(QCloseEvent* /*event*/)
 {
    Brewtarget::saveSystemOptions();
@@ -1875,6 +1914,18 @@ void MainWindow::closeEvent(QCloseEvent* /*event*/)
    if ( recipeObs )
       Brewtarget::setOption("recipeKey", recipeObs->key());
 
+   //UI save state
+   Brewtarget::setOption("MainWindow/splitter_vertical_State", splitter_vertical->saveState());
+   Brewtarget::setOption("MainWindow/splitter_horizontal_State", splitter_horizontal->saveState());
+   Brewtarget::setOption("MainWindow/treeView_recipe_headerState", treeView_recipe->header()->saveState());
+   Brewtarget::setOption("MainWindow/treeView_style_headerState", treeView_style->header()->saveState());
+   Brewtarget::setOption("MainWindow/treeView_equip_headerState", treeView_equip->header()->saveState());
+   Brewtarget::setOption("MainWindow/treeView_ferm_headerState", treeView_ferm->header()->saveState());
+   Brewtarget::setOption("MainWindow/treeView_hops_headerState", treeView_hops->header()->saveState());
+   Brewtarget::setOption("MainWindow/treeView_misc_headerState", treeView_misc->header()->saveState());
+   Brewtarget::setOption("MainWindow/treeView_yeast_headerState", treeView_yeast->header()->saveState());
+   Brewtarget::setOption("MainWindow/mashStepTableWidget_headerState", mashStepTableWidget->horizontalHeader()->saveState());
+
    // After unloading the database, can't make any more queries to it, so first
    // make the main window disappear so that redraw events won't inadvertently
    // cause any more queries.
@@ -1882,20 +1933,10 @@ void MainWindow::closeEvent(QCloseEvent* /*event*/)
 
    // Ask the user if they want to save changes, only if the dirty bit has
    // been thrown
-   if( Database::instance().isDirty() &&
-       QMessageBox::question(this,
-          QObject::tr("Save Database Changes"),
-          QObject::tr("Would you like to save the changes you made?"),
-          QMessageBox::Yes | QMessageBox::No,
-          QMessageBox::Yes)
-      == QMessageBox::Yes)
-   {
-      Database::instance().unload(true);
-   }
-   else
-   {
-      Database::instance().unload(false);
-   }
+   // We should also make sure the backup db still exists -- there's some edge
+   // cases where it doesn't.
+
+   Database::instance().unload();
 }
 
 void MainWindow::copyRecipe()
@@ -1906,7 +1947,8 @@ void MainWindow::copyRecipe()
       return;
 
    Recipe* newRec = Database::instance().newRecipe(recipeObs); // Create a deep copy.
-   newRec->setName(name);
+   if ( newRec ) 
+      newRec->setName(name);
 }
 
 void MainWindow::setMashToCurrentlySelected()
@@ -2080,6 +2122,39 @@ QFile* MainWindow::openForWrite( QString filterStr, QString defaultSuff)
      outFile = 0;
 
    return outFile;
+}
+
+void MainWindow::exportSelectedHtml() {
+   BtTreeView* active = qobject_cast<BtTreeView*>(tabWidget_Trees->currentWidget()->focusWidget());
+   QModelIndexList selected;
+   QList <Recipe*> targets;
+   QFile* outFile;
+
+   if ( active == 0 )
+      return;
+
+   // this only works for recipes
+   if ( active != treeView_recipe ) {
+       return;
+   }
+
+   // get the targeted file
+   outFile = openForWrite(tr("HTML files (*.html)"), QString("html"));
+   if ( !outFile )
+      return;
+
+   // Get the selected recipes and throw them into a list
+   selected = active->selectionModel()->selectedRows();
+   if( selected.count() == 0 )
+      return;
+
+   foreach( QModelIndex ndx, selected) 
+      targets.append( treeView_recipe->recipe(ndx) );
+
+   // and write it all
+   QTextStream out(outFile);
+   out << recipeFormatter->getHTMLFormat(targets);
+   outFile->close();
 }
 
 void MainWindow::exportSelected()
@@ -2355,17 +2430,6 @@ void MainWindow::fixBrewNote()
 void MainWindow::updateStatus(const QString status) {
    if( statusBar() )
       statusBar()->showMessage(status, 3000);
-}
-
-void MainWindow::updateUnsavedStatus(bool isUnsaved) {
-   if ( isUnsaved ) {
-      statusBar()->showMessage(tr("Unsaved Changes"));
-      actionSave->setIcon(QIcon(SAVEDIRTYPNG));
-   }
-   else {
-      statusBar()->clearMessage();
-      actionSave->setIcon(QIcon(SAVEPNG));
-   }
 }
 
 void MainWindow::closeBrewNote(BrewNote* b)

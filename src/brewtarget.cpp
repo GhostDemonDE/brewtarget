@@ -76,16 +76,23 @@
 #include "instruction.h"
 #include "water.h"
 
+// Needed for kill(2)
+#if defined(Q_OS_UNIX)
+#include <sys/types.h>
+#include <signal.h>
+#endif
+
 MainWindow* Brewtarget::_mainWindow = 0;
 QDomDocument* Brewtarget::optionsDoc;
 QTranslator* Brewtarget::defaultTrans = new QTranslator();
 QTranslator* Brewtarget::btTrans = new QTranslator();
 bool Brewtarget::userDatabaseDidNotExist = false;
-QFile Brewtarget::pidFile;
+bool Brewtarget::_isInteractive = true;
 QDateTime Brewtarget::lastDbMergeRequest = QDateTime::fromString("1986-02-24T06:00:00", Qt::ISODate);
 
 QString Brewtarget::currentLanguage = "en";
 QDir Brewtarget::userDataDir = QString();
+Brewtarget::DBTypes Brewtarget::_dbType = Brewtarget::NODB;
 
 bool Brewtarget::checkVersion = true;
 Log Brewtarget::log(true);
@@ -103,61 +110,68 @@ Brewtarget::DensityUnitType Brewtarget::densityUnit = Brewtarget::SG;
 
 QHash<int, UnitSystem*> Brewtarget::thingToUnitSystem;
 
+
+bool Brewtarget::createDir(QDir dir, QString errText)
+{
+  if( ! dir.mkpath(dir.absolutePath()) )
+  {
+    // Write a message to the log, the usablity check below will alert the user
+    QString errText(QObject::tr("Error attempting to create directory \"%1\""));
+    logE(errText.arg(dir.path()));
+  }
+
+  // It's possible that the path exists, but is useless to us
+  if( ! dir.exists() || ! dir.isReadable() )
+  {
+    QString errTitle(QObject::tr("Directory Problem"));
+
+    if( errText == NULL)
+      errText = QString(QObject::tr("\"%1\" cannot be read."));
+
+    logW(errText.arg(dir.path()));
+
+    if (Brewtarget::isInteractive()) {
+       QMessageBox::information(
+          0,
+          errTitle,
+          errText.arg(dir.path())
+       );
+    }
+    return false;
+  }
+
+  return true;
+}
+
 bool Brewtarget::ensureDirectoriesExist()
 {
-   bool success;
-   QString errTitle(QObject::tr("Directory Problem"));
-   QString errText(QObject::tr("\"%1\" cannot be read."));
+  // A missing dataDir is a serious issue, without it we're missing the default DB, sound files & translations.
+  // An attempt could be made to created it, like the other config directories, but an empty data dir is just as bad as a missing one.
+  // Because of that, we'll display a little more dire warning, and not try to create it.
+  QDir dataDir = getDataDir();
+  bool dataDirSuccess = true;
 
-   // Check data dir
-   const QDir dataDir = getDataDir();
-   if( ! dataDir.exists() || ! dataDir.isReadable() )
-   {
-      QMessageBox::information(
-         0,
-         errTitle,
-         errText.arg(dataDir.path())
-      );
-      return false;
-   }
+  if (! dataDir.exists())
+  {
+    dataDirSuccess = false;
+    QString errMsg = QString(QObject::tr("Data directory \"%1\" is missing.  Some features will be unavaliable.")).arg(dataDir.path());
+    logE(errMsg);
 
-   // Check doc dir
-   const QDir docDir = getDocDir();
-   if( ! docDir.exists() || ! docDir.isReadable() )
-   {
-      QMessageBox::information(
-         0,
-         errTitle,
-         errText.arg(docDir.path())
-      );
-      return false;
-   }
+    if (Brewtarget::isInteractive()) {
+       QMessageBox::critical(
+          0,
+          QObject::tr("Directory Problem"),
+          errMsg
+       );
+    }
+  }
 
-   // Check config dir
-   const QDir configDir = getConfigDir(&success);
-   if( !success || ! configDir.exists() || ! configDir.isReadable() )
-   {
-      QMessageBox::information(
-         0,
-         errTitle,
-         errText.arg(configDir.path())
-      );
-      return false;
-   }
 
-   // Check/create user data directory
-   const QDir userDataDir = getUserDataDir();
-   if( !userDataDir.exists() && !userDataDir.mkpath(".") )
-   {
-      QMessageBox::information(
-         0,
-         errTitle,
-         errText.arg(userDataDir.path())
-      );
-      return false;
-   }
-
-   return true;
+  return
+    dataDirSuccess &&
+    createDir(getConfigDir()) &&
+    createDir(getDocDir()) &&
+    createDir(getUserDataDir());
 }
 
 void Brewtarget::checkForNewVersion(MainWindow* mw)
@@ -309,82 +323,27 @@ QDir Brewtarget::getDocDir()
    return dir;
 }
 
-const QDir Brewtarget::getConfigDir(bool *success)
+const QDir Brewtarget::getConfigDir()
 {
 #if defined(Q_OS_LINUX) || defined(Q_OS_MAC) // Linux OS or Mac OS.
-
    QDir dir;
    QFileInfo fileInfo;
-   char* xdg_config_home = getenv("XDG_CONFIG_HOME");
-   bool tmp;
-   QFile::Permissions sevenFiveFive = QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner |
-                                      QFile::ReadGroup |                     QFile::ExeGroup |
-                                      QFile::ReadOther |                     QFile::ExeOther;
+
    // First, try XDG_CONFIG_HOME.
    // If that variable doesn't exist, create ~/.config
+   char* xdg_config_home = getenv("XDG_CONFIG_HOME");
+
    if (xdg_config_home)
    {
-      dir = xdg_config_home;
+     dir = QString(xdg_config_home).append("/brewtarget");
    }
    else
    {
-      // Creating config directory.
-      dir = QDir::home();
-      if( !dir.exists(".config") )
-      {
-         logW( QString("Config dir \"%1\" did not exist...").arg(dir.absolutePath() + "/.config") );
-         tmp = dir.mkdir(".config");
-         logW( QString( tmp ? "...created it." : "...could not create it.") );
-         if( !tmp )
-         {
-            // Failure.
-            if( success != 0 )
-               *success = false;
-            return QDir::temp();
-         }
-
-         // chmod 755 ~/.config
-         QFile::setPermissions( dir.absolutePath() + "/.config", sevenFiveFive );
-      }
-
-      // CD to config directory.
-      if( ! dir.cd(".config") )
-      {
-         logE( QString("Could not CD to \"%1\".").arg(dir.absolutePath() + "/.config") );
-         if( success != 0 )
-            *success = false;
-         return QDir::temp();
-      }
+     // If XDG_CONFIG_HOME doesn't exist, config goes in ~/.config/brewtarget
+     QString dirPath = QDir::homePath().append("/.config/brewtarget");
+     dir = QDir(dirPath);
    }
 
-   // See if brewtarget dir exists.
-   if( !dir.exists("brewtarget") )
-   {
-      logW( QString("\"%1\" does not exist...creating.").arg(dir.absolutePath() + "/brewtarget") );
-
-      // Try to make brewtarget dir.
-      if( ! dir.mkdir("brewtarget") )
-      {
-         logE( QString("Could not create \"%1\"").arg(dir.absolutePath() + "/brewtarget") );
-         if( success != 0 )
-            *success = false;
-         return QDir::temp();
-      }
-
-      // chmod 755 ~/.config/brewtarget
-      QFile::setPermissions( dir.absolutePath() + "/brewtarget", sevenFiveFive );
-   }
-
-   if( ! dir.cd("brewtarget") )
-   {
-      logE(QString("Could not CD into \"%1\"").arg(dir.absolutePath() + "/brewtarget"));
-      if( success != 0 )
-         *success = false;
-      return QDir::temp();
-   }
-
-   if( success != 0 )
-      *success = true;
    return dir.absolutePath() + "/";
 
 #elif defined(Q_OS_WIN) // Windows OS.
@@ -431,50 +390,18 @@ bool Brewtarget::initialize(const QString &userDirectory)
    qRegisterMetaType< QList<Yeast*> >();
    qRegisterMetaType< QList<Water*> >();
 
-   // In Unix, make sure the user isn't running 2 copies.
-#if defined(Q_OS_LINUX)
-   pidFile.setFileName(QString("%1.pid").arg(getUserDataDir().canonicalPath()));
-   if( pidFile.exists() )
-   {
-      // Read the pid.
-      qint64 pid;
-      pidFile.open(QIODevice::ReadOnly);
-      {
-         QTextStream pidStream(&pidFile);
-         pidStream >> pid;
-      }
-      pidFile.close();
-
-      // If the pid is in the proc filesystem, another instance is running.
-      // Have to check /proc, because perhaps the last instance crashed without
-      // cleaning up after itself.
-      QDir procDir(QString("/proc/%1").arg(pid));
-      if( procDir.exists() )
-      {
-         std::cerr << "Brewtarget is already running. PID: " << pid << std::endl;
-         return false;
-      }
-   }
-
-   // Open the pidFile, erasing any contents, and write our pid.
-   pidFile.open(QIODevice::WriteOnly | QIODevice::Truncate);
-   {
-      QTextStream pidStream(&pidFile);
-      pidStream << QCoreApplication::applicationPid();
-   }
-   pidFile.close();
-#endif
 
    // Use overwride if present.
-   if (!userDirectory.isEmpty() && QDir(userDirectory).exists())
+   if (!userDirectory.isEmpty() && QDir(userDirectory).exists()) {
       userDataDir = QDir(userDirectory).canonicalPath();
+   }
    // Use directory from app settings.
-   else if (hasOption("user_data_dir"))
+   else if (hasOption("user_data_dir")) {
       userDataDir = QDir(option("user_data_dir","").toString()).canonicalPath();
+   }
    // Guess where to put it.
    else {
       userDataDir = getConfigDir();
-      setOption("user_data_dir", userDataDir.canonicalPath());
    }
 
    // If the old options file exists, convert it. Otherwise, just get the
@@ -488,10 +415,14 @@ bool Brewtarget::initialize(const QString &userDirectory)
    log.changeDirectory(getUserDataDir());
 
    // Make sure all the necessary directories and files we need exist before starting.
-   bool success;
-   success = ensureDirectoriesExist();
-   if(!success)
-      return false;
+   ensureDirectoriesExist();
+
+   // If the directory doesn't exist, canonicalPath() will return an empty
+   // string. By waiting until after we know the directory is created, we
+   // make sure it isn't empty
+   if ( ! hasOption("user_data_dir") ) {
+      setOption("user_data_dir", userDataDir.canonicalPath());
+   }
 
    loadTranslations(); // Do internationalization.
 
@@ -512,6 +443,55 @@ bool Brewtarget::initialize(const QString &userDirectory)
       return false;
 }
 
+Brewtarget::DBTypes Brewtarget::dbType()
+{ 
+   if ( _dbType == Brewtarget::NODB )
+      _dbType = (Brewtarget::DBTypes)option("dbType", dbType()).toInt();
+   return _dbType;
+}
+
+QString Brewtarget::dbTrue(Brewtarget::DBTypes type)
+{
+   Brewtarget::DBTypes whichDb = type;
+   QString retval;
+
+   if ( whichDb == Brewtarget::NODB )
+      whichDb = dbType();
+
+   switch( whichDb ) {
+      case SQLITE:
+         retval = "1";
+         break;
+      case PGSQL:
+         retval = "true";
+         break;
+      default:
+         retval = "whiskeytangofoxtrot";
+   }
+   return retval;
+}
+
+QString Brewtarget::dbFalse(Brewtarget::DBTypes type)
+{
+   Brewtarget::DBTypes whichDb = type;
+   QString retval;
+
+   if ( whichDb == Brewtarget::NODB )
+      whichDb = dbType();
+
+   switch( whichDb ) {
+      case SQLITE:
+         retval = "0";
+         break;
+      case PGSQL:
+         retval = "false";
+         break;
+      default:
+         retval = "notwhiskeytangofoxtrot";
+   }
+   return retval;
+}
+
 void Brewtarget::cleanup()
 {
    log.info("Brewtarget is cleaning up.");
@@ -521,10 +501,15 @@ void Brewtarget::cleanup()
    delete _mainWindow;
 
    Database::dropInstance();
-#if defined(Q_OS_LINUX)
-   pidFile.remove();
-#endif
 
+}
+
+bool Brewtarget::isInteractive() {
+   return _isInteractive;
+}
+
+void Brewtarget::setInteractive(bool val) {
+   _isInteractive = val;
 }
 
 int Brewtarget::run(const QString &userDirectory)
@@ -903,6 +888,10 @@ void Brewtarget::readSystemOptions()
 
    //=======================Date format===================
    dateFormat = (Unit::unitDisplay)option("date_format",Unit::displaySI).toInt();
+
+   //=======================Database type ================
+   _dbType = (Brewtarget::DBTypes)option("dbType",Brewtarget::SQLITE).toInt();
+
 }
 
 void Brewtarget::saveSystemOptions()
@@ -1217,10 +1206,10 @@ QString Brewtarget::displayThickness( double thick_lkg, bool showUnits )
       return QString("%L1").arg(num/den, fieldWidth, format, precision).arg(volUnit->getUnitName()).arg(weightUnit->getUnitName());
 }
 
-double Brewtarget::qStringToSI(QString qstr, Unit* unit, Unit::unitDisplay dispUnit, bool force)
+double Brewtarget::qStringToSI(QString qstr, Unit* unit, Unit::unitDisplay dispUnit, Unit::unitScale dispScale)
 {
    UnitSystem* temp = findUnitSystem(unit, dispUnit);
-   return temp->qstringToSI(qstr,temp->unit(),force);
+   return temp->qstringToSI(qstr,temp->unit(),false,dispScale);
 }
 
 QString Brewtarget::ibuFormulaName()
@@ -1364,7 +1353,6 @@ void Brewtarget::setOption(QString attribute, QVariant value, const QString sect
    else
       name = generateName(attribute,section,ops);
 
-
    QSettings().setValue(name,value);
 }
 
@@ -1380,10 +1368,17 @@ QVariant Brewtarget::option(QString attribute, QVariant default_value, QString s
    return QSettings().value(name,default_value);
 }
 
-void Brewtarget::removeOption(QString attribute)
+void Brewtarget::removeOption(QString attribute, QString section)
 {
-   if ( hasOption(attribute) )
-        QSettings().remove(attribute);
+   QString name;
+
+   if ( section.isNull() )
+      name = attribute;
+   else
+      name = generateName(attribute,section,NOOP);
+
+   if ( hasOption(name) )
+        QSettings().remove(name);
 }
 
 QString Brewtarget::generateName(QString attribute, const QString section, iUnitOps ops)

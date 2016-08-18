@@ -14,6 +14,28 @@ ELSE()
    SET(brewtarget_EXECUTABLE "brewtarget")
 ENDIF()
 
+#=============================Installation Components==========================
+
+# For architecture-independent data
+SET( DATA_INSTALL_COMPONENT "Data" )
+# For architecture-dependent binaries
+SET( RUNTIME_INSTALL_COMPONENT "Runtime" )
+
+# `make install-data` or `make install-runtime`
+ADD_CUSTOM_TARGET(
+   install-data
+   COMMAND "${CMAKE_COMMAND}"
+           -DCOMPONENT=${DATA_INSTALL_COMPONENT}
+           -P "${CMAKE_BINARY_DIR}/cmake_install.cmake"
+)
+ADD_CUSTOM_TARGET(
+   install-runtime
+   DEPENDS ${brewtarget_EXECUTABLE}
+   COMMAND "${CMAKE_COMMAND}"
+           -DCOMPONENT=${RUNTIME_INSTALL_COMPONENT}
+           -P "${CMAKE_BINARY_DIR}/cmake_install.cmake"
+)
+
 #=================================Version======================================
 SET( brewtarget_VERSION_MAJOR 2 )
 SET( brewtarget_VERSION_MINOR 4 )
@@ -103,69 +125,52 @@ ENDIF()
 
 #==================================Find Qt5====================================
 
+# The minimum QT5 version we need. Keep as low as necessary.
+SET(QT5_MIN_VERSION 5.3)
+
 # Automatically run moc on source files when necessary
 SET(CMAKE_AUTOMOC ON)
 # As moc files are generated in the binary dir, tell CMake
 # to always look for includes there:
 SET(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-FIND_PACKAGE(Qt5Core REQUIRED)
+FIND_PACKAGE(Qt5Core ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5Core_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5Widgets REQUIRED)
+FIND_PACKAGE(Qt5Widgets ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5Widgets_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5Network REQUIRED)
+FIND_PACKAGE(Qt5Network ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5Network_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5PrintSupport REQUIRED)
+FIND_PACKAGE(Qt5PrintSupport ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5PrintSupport_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5Sql REQUIRED)
+FIND_PACKAGE(Qt5Sql ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5Sql_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5WebKit REQUIRED)
-INCLUDE_DIRECTORIES(${Qt5WebKit_INCLUDE_DIRS})
+# This is required to make the deploy scripts pick up the svg plugins
+FIND_PACKAGE(Qt5Svg ${QT5_MIN_VERSION} REQUIRED)
+INCLUDE_DIRECTORIES(${Qt5Svg_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5WebKitWidgets REQUIRED)
-INCLUDE_DIRECTORIES(${Qt5WebKitWidgets_INCLUDE_DIRS})
-
-FIND_PACKAGE(Qt5Xml REQUIRED)
+FIND_PACKAGE(Qt5Xml ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5Xml_INCLUDE_DIRS})
 
 IF( NOT ${NO_QTMULTIMEDIA} )
-FIND_PACKAGE(Qt5Multimedia REQUIRED)
-INCLUDE_DIRECTORIES(${Qt5Multimedia_INCLUDE_DIRS})
+   FIND_PACKAGE(Qt5Multimedia ${QT5_MIN_VERSION} REQUIRED)
+   INCLUDE_DIRECTORIES(${Qt5Multimedia_INCLUDE_DIRS})
 ENDIF()
 
-FIND_PACKAGE(Qt5Test REQUIRED)
+FIND_PACKAGE(Qt5Test ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5Test_INCLUDE_DIRS})
 
-FIND_PACKAGE(Qt5LinguistTools REQUIRED)
+FIND_PACKAGE(Qt5LinguistTools ${QT5_MIN_VERSION} REQUIRED)
 INCLUDE_DIRECTORIES(${Qt5LinguistTools_INCLUDE_DIRS})
-
-# Need to find SVG component to locate svg dlls later
-IF(WIN32)
-   FIND_PACKAGE(Qt5Svg REQUIRED)
-   INCLUDE_DIRECTORIES(${Qt5Svg_INCLUDE_DIRS})
-ENDIF()
 
 # Fuckin Qt5 requires -fPIC if Qt5 itself was built with -fPIC
 IF(Qt5_POSITION_INDEPENDENT_CODE)
    SET(CMAKE_POSITION_INDEPENDENT_CODE ON)
 ENDIF()
-
-#IF( ${BUILD_DESIGNER_PLUGINS} )
-#   FIND_PACKAGE(Qt4 4.6.0 COMPONENTS QtCore QtGui QtNetwork QtSql QtWebKit QtXml QtDesigner REQUIRED)
-#ELSE()
-#   # This is a major kludge, but linking with QtSvg is the easiest way to get
-#   # an app that includes the svg image format plugin that works.
-#   IF( APPLE )
-#      FIND_PACKAGE(Qt4 4.6.0 COMPONENTS QtCore QtGui QtNetwork QtSql QtWebkit QtXml QtSvg REQUIRED)
-#   ELSE()
-#      FIND_PACKAGE(Qt4 4.6.0 COMPONENTS QtCore QtGui QtNetwork QtSql QtWebkit QtXml REQUIRED)
-#   ENDIF()
-#ENDIF()
 
 MESSAGE( STATUS "CMAKE_SYSTEM_INCLUDE_PATH: ${CMAKE_SYSTEM_INCLUDE_PATH}" )
 
@@ -577,43 +582,54 @@ IF( NOT ${BUILD_DESIGNER_PLUGINS} )
 
    # Install the data.
    INSTALL( FILES ${brewtarget_DATA}
-            DESTINATION ${DATAPATH} )
+            DESTINATION ${DATAPATH}
+            COMPONENT ${DATA_INSTALL_COMPONENT} )
 
    # Install the documentation.
    INSTALL( FILES ${brewtarget_DOCS}
-            DESTINATION ${DOCPATH} )
+            DESTINATION ${DOCPATH}
+            COMPONENT ${DATA_INSTALL_COMPONENT} )
 
    # Install sounds.
    INSTALL( FILES ${brewtarget_SOUNDS}
-            DESTINATION "${DATAPATH}/sounds" )
+            DESTINATION "${DATAPATH}/sounds"
+            COMPONENT ${DATA_INSTALL_COMPONENT} )
 
    #-----------Unix-----------
    IF( UNIX AND NOT APPLE )
       # Install the icons.
       INSTALL( FILES ${brewtarget_ICONS}
-               DESTINATION "${DATAROOTDIR}/icons/hicolor/scalable/apps/" )
+               DESTINATION "${DATAROOTDIR}/icons/hicolor/scalable/apps/"
+               COMPONENT ${DATA_INSTALL_COMPONENT} )
 
       # Install the .desktop file.
       INSTALL( FILES ${brewtarget_DESKTOP}
-               DESTINATION "${DATAROOTDIR}/applications" )
+               DESTINATION "${DATAROOTDIR}/applications"
+               COMPONENT ${DATA_INSTALL_COMPONENT} )
 
       # Install changelog
       INSTALL( FILES ${CHANGELOG}
-               DESTINATION ${DOCPATH} )
+               DESTINATION ${DOCPATH}
+               COMPONENT ${DATA_INSTALL_COMPONENT} )
    ENDIF()
 
    #--------Windows--------
    IF( WIN32 )
       INSTALL( FILES ${Qt_DLLs}
-               DESTINATION "bin" )
+               DESTINATION "bin"
+               COMPONENT ${RUNTIME_INSTALL_COMPONENT} )
       INSTALL( FILES ${SQL_Drivers_DLLs}
-               DESTINATION "bin/sqldrivers" )
+               DESTINATION "bin/sqldrivers"
+               COMPONENT ${RUNTIME_INSTALL_COMPONENT} )
       INSTALL( FILES ${Image_Formats_DLLs}
-               DESTINATION "bin/imageformats" )
+               DESTINATION "bin/imageformats"
+               COMPONENT ${RUNTIME_INSTALL_COMPONENT} )
       INSTALL( FILES ${Icon_Engines_DLLs}
-               DESTINATION "bin/iconengines" )
+               DESTINATION "bin/iconengines"
+               COMPONENT ${RUNTIME_INSTALL_COMPONENT} )
       INSTALL( FILES ${Platform_DLLs}
-               DESTINATION "bin/platforms" )
+               DESTINATION "bin/platforms"
+               COMPONENT ${RUNTIME_INSTALL_COMPONENT})
    ENDIF()
 ENDIF()
 

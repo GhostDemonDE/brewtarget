@@ -72,7 +72,6 @@ void MashStepTableModel::setMash( Mash* m )
       QList<MashStep*> tmpSteps = mashObs->mashSteps();
       if(tmpSteps.size() > 0){
          beginInsertRows( QModelIndex(), 0, tmpSteps.size()-1 );
-         //connect( mashObs, SIGNAL(changed(QMetaProperty,QVariant)), this, SLOT(mashChanged(QMetaProperty,QVariant)) );
          steps = tmpSteps;
          for( i = 0; i < steps.size(); ++i )
             connect( steps[i], SIGNAL(changed(QMetaProperty,QVariant)), this, SLOT(mashStepChanged(QMetaProperty,QVariant)) );
@@ -85,6 +84,41 @@ void MashStepTableModel::setMash( Mash* m )
       parentTableWidget->resizeColumnsToContents();
       parentTableWidget->resizeRowsToContents();
    }
+}
+
+void MashStepTableModel::reorderMashStep(MashStep* step, int current)
+{
+   // doSomething will be -1 if we are moving up and 1 if we are moving down
+   // and 0 if nothing is to be done (see next comment)
+   int doSomething = step->stepNumber() - current - 1;
+   int destChild   = step->stepNumber();
+
+   // Moving a step up or down generates two signals, one for each row
+   // impacted. If we move row B above row A:
+   //    1. The first signal is to move B above A, which will result in A
+   //    being below B
+   //    2. The second signal is to move A below B, which we just did.
+   // Therefore, the second signal mostly needs to be ignored. In those
+   // circusmtances, A->stepNumber() will be the same as it's position in the
+   // steps list, modulo some indexing
+   if ( doSomething == 0 )
+      return;
+
+   // beginMoveRows is a little odd. When moving rows within the same parent,
+   // destChild points one beyond where you want to insert the row. Think of
+   // it as saying "insert before destChild". If we are moving something up,
+   // we need to be one less than stepNumber. If we are moving down, it just
+   // works.
+   if ( doSomething < 0 )
+      destChild--; 
+
+   beginMoveRows(QModelIndex(),current,current,QModelIndex(),destChild);
+   // doSomething is -1 if moving up and 1 if moving down. swap current with
+   // current -1 when moving up, and swap current with current+1 when moving
+   // down
+   steps.swap(current,current+doSomething);
+   endMoveRows();
+
 }
 
 MashStep* MashStepTableModel::getMashStep(unsigned int i)
@@ -104,9 +138,15 @@ void MashStepTableModel::mashChanged()
 void MashStepTableModel::mashStepChanged(QMetaProperty prop, QVariant val)
 {
    int i;
+
    MashStep* stepSender = qobject_cast<MashStep*>(sender());
    if( stepSender && (i = steps.indexOf(stepSender)) >= 0 )
    {
+      if ( prop.name() == QStringLiteral("stepNumber") ) {
+         reorderMashStep(stepSender,i);
+      }
+         
+
       emit dataChanged( QAbstractItemModel::createIndex(i, 0),
                         QAbstractItemModel::createIndex(i, MASHSTEPNUMCOLS-1));
    }
@@ -175,7 +215,7 @@ QVariant MashStepTableModel::data( const QModelIndex& index, int role ) const
          return QVariant( Brewtarget::displayAmount(row->stepTemp_c(), Units::celsius,3, unit, Unit::noScale) );
       case MASHSTEPTIMECOL:
          scale = displayScale(col);
-         return QVariant( Brewtarget::displayAmount(row->stepTime_min(), Units::minutes,0,Unit::noUnit,scale) );
+         return QVariant( Brewtarget::displayAmount(row->stepTime_min(), Units::minutes,3,Unit::noUnit,scale) );
       default :
          Brewtarget::logW(tr("Bad column: %1").arg(index.column()));
          return QVariant();
@@ -224,7 +264,6 @@ Qt::ItemFlags MashStepTableModel::flags(const QModelIndex& index ) const
 bool MashStepTableModel::setData( const QModelIndex& index, const QVariant& value, int role )
 {
    MashStep *row;
-   Unit::unitDisplay unit;
 
    if( mashObs == 0 )
       return false;
@@ -233,6 +272,9 @@ bool MashStepTableModel::setData( const QModelIndex& index, const QVariant& valu
       return false;
    else
       row = steps[index.row()];
+
+   Unit::unitDisplay dspUnit = displayUnit(index.column());
+   Unit::unitScale   dspScl  = displayScale(index.column());
 
    switch( index.column() )
    {
@@ -255,11 +297,10 @@ bool MashStepTableModel::setData( const QModelIndex& index, const QVariant& valu
       case MASHSTEPAMOUNTCOL:
          if( value.canConvert(QVariant::String) )
          {
-            unit = displayUnit(MASHSTEPAMOUNTCOL);
             if( row->type() == MashStep::Decoction )
-               row->setDecoctionAmount_l( Brewtarget::qStringToSI(value.toString(),Units::liters,unit) );
+               row->setDecoctionAmount_l( Brewtarget::qStringToSI(value.toString(),Units::liters,dspUnit,dspScl) );
             else
-               row->setInfuseAmount_l( Brewtarget::qStringToSI(value.toString(),Units::liters,unit) );
+               row->setInfuseAmount_l( Brewtarget::qStringToSI(value.toString(),Units::liters,dspUnit,dspScl) );
             return true;
          }
          else
@@ -267,8 +308,7 @@ bool MashStepTableModel::setData( const QModelIndex& index, const QVariant& valu
       case MASHSTEPTEMPCOL:
          if( value.canConvert(QVariant::String) && row->type() != MashStep::Decoction )
          {
-            unit = displayUnit(MASHSTEPTEMPCOL);
-            row->setInfuseTemp_c( Brewtarget::qStringToSI(value.toString(),Units::celsius,unit) );
+            row->setInfuseTemp_c( Brewtarget::qStringToSI(value.toString(),Units::celsius,dspUnit,dspScl) );
             return true;
          }
          else
@@ -276,9 +316,8 @@ bool MashStepTableModel::setData( const QModelIndex& index, const QVariant& valu
       case MASHSTEPTARGETTEMPCOL:
          if( value.canConvert(QVariant::String) )
          {
-            unit = displayUnit(MASHSTEPTARGETTEMPCOL);
-            row->setStepTemp_c( Brewtarget::qStringToSI(value.toString(),Units::celsius,unit) );
-            row->setEndTemp_c( Brewtarget::qStringToSI(value.toString(),Units::celsius,unit) );
+            row->setStepTemp_c( Brewtarget::qStringToSI(value.toString(),Units::celsius,dspUnit,dspScl) );
+            row->setEndTemp_c( Brewtarget::qStringToSI(value.toString(),Units::celsius,dspUnit,dspScl) );
             return true;
          }
          else
@@ -286,7 +325,7 @@ bool MashStepTableModel::setData( const QModelIndex& index, const QVariant& valu
       case MASHSTEPTIMECOL:
          if( value.canConvert(QVariant::String) )
          {
-            row->setStepTime_min( Brewtarget::qStringToSI(value.toString(),Units::minutes) );
+            row->setStepTime_min( Brewtarget::qStringToSI(value.toString(),Units::minutes,dspUnit,dspScl) );
             return true;
          }
          else
@@ -459,10 +498,9 @@ QWidget* MashStepItemDelegate::createEditor(QWidget *parent, const QStyleOptionV
    {
       QComboBox *box = new QComboBox(parent);
 
-      box->addItem("Infusion");
-      box->addItem("Temperature");
-      box->addItem("Decoction");
-      box->setMinimumWidth(box->minimumSizeHint().width());
+      foreach( QString mtype, MashStep::types )
+         box->addItem(mtype);
+
       box->setSizeAdjustPolicy(QComboBox::AdjustToContents);
 
       return box;
